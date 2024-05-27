@@ -1,0 +1,90 @@
+#include "pico/stdlib.h"
+#include <stdbool.h>
+#include "hardware/pwm.h"
+#include <stdio.h>
+
+#define RED_LED 11
+#define GREEN_LED 12
+#define BLUE_LED 13
+#define STEP 25       // Steps up from 0% to 100% in 5% increments
+#define MAX_LEVEL 250 // Maximum brightness level
+#define MIN_LEVEL 0   // Minimum brightness level
+
+// Function to calculate percentage brightness
+float calculateBrightnessPercentage(int level)
+{
+    return (level / (float)MAX_LEVEL) * 100;
+}
+
+int main(void)
+{
+    stdio_init_all();
+
+    gpio_set_function(RED_LED, GPIO_FUNC_PWM);
+    gpio_set_function(GREEN_LED, GPIO_FUNC_PWM);
+    gpio_set_function(BLUE_LED, GPIO_FUNC_PWM);
+
+    uint slice_num_RED = pwm_gpio_to_slice_num(RED_LED);
+    uint slice_num_GREEN = pwm_gpio_to_slice_num(GREEN_LED);
+    uint slice_num_BLUE = pwm_gpio_to_slice_num(BLUE_LED);
+
+    int RED_LEVEL = 0;
+    int GREEN_LEVEL = 0;
+    int BLUE_LEVEL = 0;
+
+    pwm_set_enabled(slice_num_RED, true);
+    pwm_set_enabled(slice_num_GREEN, true);
+    pwm_set_enabled(slice_num_BLUE, true);
+
+    pwm_set_gpio_level(RED_LED, RED_LEVEL);
+    pwm_set_gpio_level(GREEN_LED, GREEN_LEVEL);
+    pwm_set_gpio_level(BLUE_LED, BLUE_LEVEL);
+
+    int keypress;
+
+    while (true)
+    {
+        // Read keypress
+        keypress = getchar_timeout_us(0);
+        sleep_ms(50);
+        if (keypress != PICO_ERROR_TIMEOUT)
+        {
+            // Adjust brightness levels based on keypress
+            switch (keypress)
+            {
+            case 'r':
+                RED_LEVEL = (RED_LEVEL + STEP <= MAX_LEVEL) ? RED_LEVEL + STEP : MAX_LEVEL;
+                break;
+            case 'R':
+                RED_LEVEL = (RED_LEVEL - STEP >= MIN_LEVEL) ? RED_LEVEL - STEP : MIN_LEVEL;
+                break;
+            case 'g':
+                GREEN_LEVEL = (GREEN_LEVEL + STEP <= MAX_LEVEL) ? GREEN_LEVEL + STEP : MAX_LEVEL;
+                break;
+            case 'G':
+                GREEN_LEVEL = (GREEN_LEVEL - STEP >= MIN_LEVEL) ? GREEN_LEVEL - STEP : MIN_LEVEL;
+                break;
+            case 'b':
+                BLUE_LEVEL = (BLUE_LEVEL + STEP <= MAX_LEVEL) ? BLUE_LEVEL + STEP : MAX_LEVEL;
+                break;
+            case 'B':
+                BLUE_LEVEL = (BLUE_LEVEL - STEP >= MIN_LEVEL) ? BLUE_LEVEL - STEP : MIN_LEVEL;
+                break;
+            
+            default:
+                break;
+            }
+
+            // Set the LED brightness
+            pwm_set_gpio_level(RED_LED, RED_LEVEL * RED_LEVEL);
+            pwm_set_gpio_level(GREEN_LED, GREEN_LEVEL * GREEN_LEVEL);
+            pwm_set_gpio_level(BLUE_LED, BLUE_LEVEL * BLUE_LEVEL);
+
+            // Calculate and print percentage brightness of the LED
+            printf("Red: %.1f%%, Green: %.1f%%, Blue: %.1f%%\r\n", calculateBrightnessPercentage(RED_LEVEL), calculateBrightnessPercentage(GREEN_LEVEL), calculateBrightnessPercentage(BLUE_LEVEL));
+
+        }
+
+        sleep_ms(100); // Added a slight delay for stability
+    }
+}

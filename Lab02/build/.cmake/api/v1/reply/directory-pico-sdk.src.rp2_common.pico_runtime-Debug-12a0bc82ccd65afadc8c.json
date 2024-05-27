@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "pico-sdk/src/rp2_common/pico_runtime",
+		"source" : "C:/Users/yelps/OneDrive - James Cook University/Uni/2023/Semester 2/CC2511 - Embedded Systems Design/Subject Software/pico-sdk-master/src/rp2_common/pico_runtime"
+	}
+}

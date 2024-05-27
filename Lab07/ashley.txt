@@ -1,0 +1,227 @@
+/**************************************************************
+ * main.c
+ * rev 1.0 12-Sep-2023 yelps
+ * Lab7
+ * ***********************************************************/
+
+// Header Files
+#include "pico/stdlib.h"
+#include <stdbool.h>
+#include "hardware/pwm.h"
+#include "hardware/uart.h"
+#include "hardware/irq.h"
+#include <stdio.h>
+#include "string.h"
+#include "terminal.h"
+
+// UART Configuration
+#define UART_TX_PIN 0 // Default UART Transmit Pin
+#define UART_RX_PIN 1 // Default UART Receive Pin
+#define UART_ID uart0 
+#define BAUD_RATE 115200
+#define DATA_BITS 8             
+#define STOP_BITS 1             
+#define PARITY UART_PARITY_NONE 
+
+// LED PWM Configuration
+#define RED_LED 11
+#define GREEN_LED 12
+#define BLUE_LED 13
+#define MAX_LEVEL 255 // 255 = 100%
+#define MIN_LEVEL 0   // 0 = 0%
+
+void display_header()
+{
+  term_move_to(1, 1);
+  term_set_color(clrWhite, clrBlue); // Setting white text on blue background for the header
+  printf("************************* LED CONTROLLER UI *************************");
+  term_set_color(clrWhite, clrBlack); // Resetting the color to default
+}
+
+void display_pwm_info(uint8_t red, uint8_t green, uint8_t blue)
+{
+  term_move_to(1, 3);
+  printf("Red LED: %d\n", red);
+
+  term_move_to(1, 4);
+  printf("Green LED: %d\n", green);
+
+  term_move_to(1, 5);
+  printf("Blue LED: %d\n", blue);
+}
+
+void display_instructions()
+{
+  term_move_to(1, 7);
+  printf("LED Control Instructions:");
+  term_move_to(1, 8);
+  printf("type: red n");
+  term_move_to(1, 9);
+  printf("type: green n");
+  term_move_to(1, 10);
+  printf("type: blue n");
+}
+
+void display_code_lines()
+{
+  term_move_to(1, 12);
+}
+
+void update_ui()
+{
+  term_cls(); // Clear the screen
+  display_header();
+  display_pwm_info(red, green, blue);
+  display_instructions();
+  display_code_lines();
+}
+
+volatile bool input_ready = false; 
+
+// static int chars_rxed = 0; //??
+
+volatile char buf[10];      
+volatile uint buf_index = 0; 
+
+uint8_t red;
+uint8_t green;
+uint8_t blue;
+
+int brightness;
+
+// RX interrupt handler
+void on_uart_rx()
+{
+  while (uart_is_readable(UART_ID))
+  {
+    uint8_t ch = uart_getc(UART_ID);
+    uart_putc(UART_ID, ch);
+    // when im here it means that i have received a character and the interrupt (isr) is called
+    // put received character in a buffer
+    buf[buf_index] = ch; // save the character
+    buf_index++;         // increment the index
+
+
+    if (ch == '\r') // Check for newline character (Enter key)
+    {
+      uart_putc(UART_ID, '\n');
+      ch = '\n';
+      buf[buf_index] = '\0'; // Null-terminate the buffer
+      buf_index = 0;
+
+      if (sscanf((char *)buf, "red %d", &brightness) == 1)
+      {
+        red = brightness;
+        pwm_set_gpio_level(RED_LED, red * red);
+        printf("Red LED has been set to %d \r\n", red);
+        input_ready = true;
+      }
+
+      else if (sscanf((char *)buf, "green %d", &brightness) == 1)
+      {
+        green = brightness;
+        pwm_set_gpio_level(GREEN_LED, green * green);
+        printf("Green LED has been set to %d \r\n", green);
+        input_ready = true;
+      }
+
+      else if (sscanf((char *)buf, "blue %d", &brightness) == 1)
+      {
+        blue = brightness;
+        pwm_set_gpio_level(BLUE_LED, blue * blue);
+        printf("Blue LED has been set to %d \r\n", blue);
+        input_ready = true;
+      }
+
+      // Trying to get LED levels and display as a triplet
+      // else if (strcmp((char *)buf, "current") == 0)
+      // {
+      //   printf("Red %d, Green %d, Blue %d \r\n", red, green, blue);
+      //   input_ready = true;
+      // }
+
+      else if (strcmp((char *)buf, "off") == 1)
+      {
+        pwm_set_gpio_level(RED_LED, 0);
+        pwm_set_gpio_level(GREEN_LED, 0);
+        pwm_set_gpio_level(BLUE_LED, 0);
+        printf("LED is off \r\n");
+        input_ready = true;
+      }
+      else
+      {
+        printf("A was not received\r\n");
+        input_ready = true;
+      }
+    }
+  }
+}
+
+int main()
+{
+  stdio_init_all();
+
+  uart_init(UART_ID, 2400);
+
+  gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
+  gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
+
+  int ch;
+
+  int __unused actual = uart_set_baudrate(UART_ID, BAUD_RATE);
+
+  uart_set_hw_flow(UART_ID, false, false); // Set UART flow control CTS/RTS, we don't want these, so turn them off
+
+  uart_set_format(UART_ID, DATA_BITS, STOP_BITS, PARITY); // Set our data format
+
+  uart_set_fifo_enabled(UART_ID, false); // Turn off FIFO's - we want to do this character by character
+
+  // Set up an RX interrupt
+  // We need to set up the handler first
+  // Select correct interrupt for the UART we are using
+  int UART_IRQ = UART_ID == uart0 ? UART0_IRQ : UART1_IRQ;
+
+  irq_set_exclusive_handler(UART_IRQ, on_uart_rx); // And set up and enable the interrupt handlers
+  irq_set_enabled(UART_IRQ, true);
+
+  uart_set_irq_enables(UART_ID, true, false); // Now enable the UART to send interrupts - RX only
+
+  uart_puts(UART_ID, "\nHello, uart interrupts\n");
+
+  //**************** PWM INITIALISATION ***********************
+  gpio_set_function(RED_LED, GPIO_FUNC_PWM);
+  gpio_set_function(GREEN_LED, GPIO_FUNC_PWM);
+  gpio_set_function(BLUE_LED, GPIO_FUNC_PWM);
+
+  uint slice_num_RED = pwm_gpio_to_slice_num(RED_LED);
+  uint slice_num_GREEN = pwm_gpio_to_slice_num(GREEN_LED);
+  uint slice_num_BLUE = pwm_gpio_to_slice_num(BLUE_LED);
+
+  int RED_LEVEL = 0;
+  int GREEN_LEVEL = 0;
+  int BLUE_LEVEL = 0;
+
+  pwm_set_enabled(slice_num_RED, true);
+  pwm_set_enabled(slice_num_GREEN, true);
+  pwm_set_enabled(slice_num_BLUE, true);
+
+  pwm_set_gpio_level(RED_LED, RED_LEVEL);
+  pwm_set_gpio_level(GREEN_LED, GREEN_LEVEL);
+  pwm_set_gpio_level(BLUE_LED, BLUE_LEVEL);
+  //**********************************************************
+
+  
+
+  while (1)
+  {
+    while (input_ready)
+    {
+      __asm("wfi"); // Puts in low power mode
+    }
+    // have some inputs to process
+    // use sscanf and strcmp to process
+    input_ready = false; // how does input_ready become true again?
+  }
+}
+
+/// \end:uart_advanced[]

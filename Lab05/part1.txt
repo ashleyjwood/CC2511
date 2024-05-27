@@ -1,0 +1,121 @@
+#include "pico/stdlib.h"
+#include <stdbool.h>
+#include "hardware/pwm.h"
+#include <stdio.h>
+
+#define CONTENT_OF(addr) (*(volatile uint32_t *)addr)
+#define PAD_CONTROL_BASE 0x4001c000
+#define REG_PAD_CONTROL_GPIO15 (PAD_CONTROL_BASE + 0x40)
+#define CTRL_PDE 0x4
+#define CTRL_PUE 0x8
+
+// #define RED_LED 11
+// #define GREEN_LED 12
+#define BLUE_LED 13
+#define STEP 5        // Steps up from 0% to 100% in 2% increments
+#define MAX_LEVEL 250 // Set to 250 instead of 255 cause 51 steps is gross
+#define MIN_LEVEL 0
+
+// Function to calculate percentage brightness
+float calculateBrightnessPercentage(int level)
+{
+    return (level / (float)MAX_LEVEL) * 100;
+}
+
+int main(void)
+{
+    stdio_init_all();
+
+    // gpio_set_function(RED_LED, GPIO_FUNC_PWM);
+    // gpio_set_function(GREEN_LED, GPIO_FUNC_PWM);
+    gpio_set_function(BLUE_LED, GPIO_FUNC_PWM);
+
+    // uint slice_num_RED = pwm_gpio_to_slice_num(RED_LED);
+    // uint slice_num_GREEN = pwm_gpio_to_slice_num(GREEN_LED);
+    uint slice_num_BLUE = pwm_gpio_to_slice_num(BLUE_LED);
+
+    // int RED_LEVEL = 0;
+    // int GREEN_LEVEL = 0;
+    int BLUE_LEVEL = 0;
+
+    // pwm_set_enabled(slice_num_RED, true);
+    // pwm_set_enabled(slice_num_GREEN, true);
+    pwm_set_enabled(slice_num_BLUE, true);
+
+    // pwm_set_gpio_level(RED_LED, RED_LEVEL);
+    // pwm_set_gpio_level(GREEN_LED, GREEN_LEVEL);
+    pwm_set_gpio_level(BLUE_LED, BLUE_LEVEL);
+
+    // Configure internal pull-up and pull-down resistors for GPIO15
+    // CONTENT_OF(REG_PAD_CONTROL_GPIO15) &= ~(CTRL_PUE | CTRL_PDE);
+
+    // GPIO pin for digital input
+    int input_pin = 15; // Change this to your chosen input pin
+    gpio_init(input_pin);
+    gpio_set_dir(input_pin, GPIO_IN);
+
+    int c;
+
+    while (true)
+    {
+
+        // Read the digital input from the chosen pin
+        bool input_state = gpio_get(input_pin);
+
+        // Control the blue LED based on the input state
+        if (input_state)
+        {
+            BLUE_LEVEL = MAX_LEVEL;
+            // GREEN_LEVEL = MAX_LEVEL;
+            // RED_LEVEL = MAX_LEVEL;
+        }
+        else
+        {
+            BLUE_LEVEL = MIN_LEVEL;
+            // GREEN_LEVEL = MIN_LEVEL;
+            // RED_LEVEL = MIN_LEVEL;
+        }
+
+        // Calculate and print percentage brightness of the LED
+        // printf("Red: %.1f%%\r\n", calculateBrightnessPercentage(RED_LEVEL));
+        // printf("Green: %.1f%%\r\n", calculateBrightnessPercentage(GREEN_LEVEL));
+        printf("Blue: %.1f%%\r\n", calculateBrightnessPercentage(BLUE_LEVEL));
+
+        // Set the LED brightness
+        // pwm_set_gpio_level(RED_LED, RED_LEVEL * RED_LEVEL);
+        // pwm_set_gpio_level(GREEN_LED, GREEN_LEVEL * GREEN_LEVEL);
+        pwm_set_gpio_level(BLUE_LED, BLUE_LEVEL * BLUE_LEVEL);
+
+        printf("Reading from pico board\r\n");
+        sleep_ms(500);
+        int keypress = getchar_timeout_us(0);
+        if (keypress != PICO_ERROR_TIMEOUT)
+        {
+
+            switch (keypress)
+            {
+
+            case 'u': //
+                CONTENT_OF(REG_PAD_CONTROL_GPIO15) |= CTRL_PUE;
+                CONTENT_OF(REG_PAD_CONTROL_GPIO15) &= ~CTRL_PDE;
+                printf("Pullup on, pulldown off\r\n");
+                break;
+
+            case 'd': //
+                CONTENT_OF(REG_PAD_CONTROL_GPIO15) &= ~CTRL_PUE;
+                CONTENT_OF(REG_PAD_CONTROL_GPIO15) |= CTRL_PDE;
+                printf("Pullup off, pulldown on\r\n");
+                break;
+
+            case 'o': //
+                CONTENT_OF(REG_PAD_CONTROL_GPIO15) &= ~(CTRL_PUE | CTRL_PDE);
+                printf("Pullup off, pulldown off\r\n");
+                break;
+            default:
+            }
+
+            // Add a small delay to avoid rapid changes
+            sleep_ms(500);
+        }
+    }
+}
